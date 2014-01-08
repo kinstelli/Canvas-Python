@@ -59,8 +59,9 @@ def get_all(api_call):
     Example: get_all('courses/10101/quizzes')
     """
     #open an http stream
+    #print 'getting: '+'https://'+state.SITE+'/api/v1/'+       api_call+'?access_token='+state.TOKEN
     result_of_get = urllib2.urlopen('https://'+state.SITE+'/api/v1/'+\
-        api_call+'?access_token='+state.TOKEN)
+        api_call+'?per_page=50&access_token='+state.TOKEN)
     # fetch all content as a string
     content = result_of_get.read()
     # convert to a JSON object
@@ -68,21 +69,33 @@ def get_all(api_call):
     
     #There may be more content; get the rest
     
-    #Find out how many pages there are, using the header
+    #Find out if there are more, using the header
     info=dict(result_of_get.info())
-    pages = info['link'].split(',')[3] #current,next,first,last --> last
-    link_to_last = pages.split(';')[0]
-    query_for_last = link_to_last.split('?')[-1]
-    num_pages = int(query_for_last.split('&')[0].split('=')[-1])
-    # get the other pages
-    for page in range(2,num_pages+1): #already have first page
-        result_of_get = urllib2.urlopen(\
-            'https://'+state.SITE+'/api/v1/'+api_call+\
-            '?page='+str(page)+'&access_token='+state.TOKEN)
+    try:
+        pages = info['link'].split(',') #current,next,first,last 
+    except KeyError: #if this was the only page
+        return content_list
+    
+    #get the next page and append to content_list
+    while True: #repeat until there isn't another page
+        # Parse the links from the header
+        links = {} #initialize an empty dictionary to store the header's link element data
+        for link in pages: # pages is comma-separated info from the link element of the header
+            url, rel = link.split(';') # URL link and its relation to current page
+            rel = rel[6:-1] # strip ' rel="' and closing '"'
+            url = url[1:-1] #strips '<' and '>' from url
+            links[rel]=url # build a dictionary so that link['next'] will have the desired URL
+        # 
+        try:
+            result_of_get = urllib2.urlopen(links['next']+'&access_token='+state.TOKEN)
+        except KeyError: # Done since there is no 'next' 
+            return content_list
         content = result_of_get.read()
-        content_list += json.loads(content)
-
-    return content_list
+        content_list += json.loads(content) #append the new page's content
+        #refresh pages variable with the link element of the new page's header for the next iteration
+        info=dict(result_of_get.info())
+        pages = info['link'].split(',') #current,next,first,last 
+        
     
 ####
 # These functions return lists of information for a course.
